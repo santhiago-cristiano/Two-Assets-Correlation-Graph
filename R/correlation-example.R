@@ -34,4 +34,4 @@ p6 <- plotCombinations(dfx, tickers = c("x", "y6"))
 
 p_all <- grid.arrange(p1, p2, p3, p4, p5, p6)
 
-ggsave(filename = "correlation-plot.svg", p_all, scale = 1.5, device = "svg")
+ggsave(filename = "frontiers-plot.svg", p_all, scale = 1.5, device = "svg")
