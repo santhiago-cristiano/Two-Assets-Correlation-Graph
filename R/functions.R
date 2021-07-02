@@ -20,23 +20,23 @@ library(scales)
 getData <- function(tickers, long = T) {
   # iterate through the tickers and get the last adjusted price in a data.table
   res <- lapply(tickers, function(x) {
-
+    
     dat <- getSymbols(x, from = "2000-01-01", auto.assign = F)
-
+    
     dt <- data.table(date = as.Date(index(dat)),
                      ticker = x,
                      price = as.numeric(Ad(dat)))
     return(dt)
   })
-
+  
   # combine the list to one data.table
   res <- rbindlist(res)
-
+  
   # cast the data if the user wants to get the data in a wide format
   if (!long) {
     res <- dcast(res, date ~ ticker)
   }
-
+  
   return(res)
 }
 
@@ -65,14 +65,14 @@ getData <- function(tickers, long = T) {
 rmultvar = function(x, r, y_mean, y_sd){
   # inspired by gung
   # http://stats.stackexchange.com/questions/38856/how-to-generate-correlated-random-numbers-given-means-variances-and-degree-of
-
+  
   x2 <- (x -  mean(x)) / sd(x)
   r2 <- r ^ 2
   ve <- 1 - r2
   SD <- sqrt(ve)
   e <- rnorm(length(x2), mean = 0, sd = SD)
   y <- r*x2 + e
-
+  
   y <- (y - mean(y)) * y_sd + y_mean
   return(y)
 }
@@ -89,7 +89,7 @@ rmultvar = function(x, r, y_mean, y_sd){
 #'
 calcEFParamsLong <- function(x) {
   x <- x[is.finite(ret), .(date, ticker, ret)]
-
+  
   rets <- dcast(x, formula = date ~ ticker, value.var = "ret")[, date := NULL]
   
   retbar <- colMeans(rets, na.rm = T)
@@ -148,33 +148,57 @@ calcEFValues <- function(x, abcd, upper = T) {
 #' @examples
 plotCombinations <- function(dat, tickers) {
   dat <- dat[ticker %in% tickers]
-
-  list1 <- calcABCDs(dat)
+  
+  list1 <- calcEFParamsLong(dat)
   tabs <- dat[, .(mean = mean(ret), sd = sd(ret)), by = "ticker"]
-
+  
   dfUpper <- data.table(x = seq(from = 0, to = max(tabs$sd), length.out = 10000))
   dfLower <- data.table(x = seq(from = 0, to = min(tabs$sd), length.out = 10000))
-
-  dfUpper[, y := calcEffPoints(x, list1, upper = T)]
-  dfLower[, y := calcEffPoints(x, list1, upper = F)]
-
+  
+  dfUpper[, y := calcEFValues(x, list1, upper = T)]
+  dfLower[, y := calcEFValues(x, list1, upper = F)]
+  
   # trim values below the lower point
   y_min <- dat[, mean(ret), by = ticker][, min(V1)]
-
+  
   dfUpper <- dfUpper[y >= y_min]
   dfLower <- dfLower[y >= y_min]
-
-  correl <- cor(dat[ticker == tickers[1], ret], dat[ticker == tickers[2], ret]) %>% round(2)
-
+  
+  correl <-
+    cor(dat[ticker == tickers[1], ret], dat[ticker == tickers[2], ret]) %>%
+    round(2)
+  
   ggplot() +
-    geom_line(data = dfUpper, aes(x = x, y = y), linetype = "dashed") +
-    geom_line(data = dfLower, aes(x = x, y = y), linetype = "dashed") +
-    geom_point(data = tabs, aes(x = sd, y = mean), color = "red", shape = 16) +
-    theme_bw() + geom_hline(yintercept = 0, color = "darkgrey") +
-    geom_vline(xintercept = 0, color = "darkgrey") +
-    ggtitle(paste0("Correlation: ", correl)) +
-    xlab("Volatility") + ylab("Expected Returns") +
-    scale_y_continuous(label = percent, limits = c(0, max(tabs$mean) * 1.2)) +
-    scale_x_continuous(label = percent, limits = c(0, max(tabs$sd) * 1.2))
-
+    geom_line(
+      data = dfUpper,
+      aes(x = x, y = y),
+      size = 0.75,
+      color = "red",
+      linetype = "solid"
+    ) +
+    geom_line(
+      data = dfLower,
+      aes(x = x, y = y),
+      size = 0.75,
+      color = "red",
+      linetype = "solid"
+    ) +
+    theme_classic() +
+    ggtitle(paste0("Correlação = ", correl)) +
+    xlab("Desvio Padrão") +
+    ylab("Retorno Esperado") +
+    expand_limits(x = 0, y = 0) +
+    scale_y_continuous(
+      label = scales::percent_format(accuracy = 0.01, decimal.mark = ','),
+      limits = c(0, max(tabs$mean) * 1.2),
+      expand = c(0, 0)
+    ) +
+    scale_x_continuous(
+      label = scales::percent_format(accuracy = 0.01, decimal.mark = ','),
+      limits = c(0, max(tabs$sd) * 1.2),
+      expand = c(0, 0)
+    ) +
+    theme(panel.grid.major.y = element_line(linetype = "dashed"))
+  
 }
+
